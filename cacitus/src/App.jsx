@@ -324,19 +324,43 @@ function CarnetVisual({ afiliado }) {
   );
 }
 
+// ── Cargar html2canvas una vez ───────────────────────────────────
+let _h2cPromise = null;
+function loadH2C() {
+  if (!_h2cPromise) {
+    _h2cPromise = new Promise((res, rej) => {
+      if (window.html2canvas) return res();
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+  return _h2cPromise;
+}
+
 // ── Carnet con botón de descarga ─────────────────────────────────
 function CarnetConDescarga({ afiliado, onSimular }) {
   const [descargando, setDescargando] = useState(false);
-  const hoy = new Date();
-  const vigente = afiliado.activo && new Date(afiliado.vence) >= hoy;
+  const carnetRef = useRef(null);
 
   async function descargar() {
     setDescargando(true);
     try {
-      const dataUrl = await generarImagenCarnet(afiliado, vigente);
+      await loadQRLib();
+      await loadH2C();
+      // Esperar a que el QR esté completamente renderizado
+      await new Promise(r => setTimeout(r, 600));
+      const canvas = await window.html2canvas(carnetRef.current, {
+        scale: 3,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+      });
       const link = document.createElement("a");
       link.download = `carnet-${afiliado.id}.png`;
-      link.href = dataUrl;
+      link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (e) {
       console.error(e);
@@ -347,7 +371,9 @@ function CarnetConDescarga({ afiliado, onSimular }) {
 
   return (
     <div>
-      <CarnetVisual afiliado={afiliado} />
+      <div ref={carnetRef} style={{ display: "inline-block" }}>
+        <CarnetVisual afiliado={afiliado} />
+      </div>
       <div style={{ display: "flex", gap: 8, marginTop: 10, justifyContent: "center" }}>
         <button onClick={descargar} disabled={descargando} style={{
           padding: "8px 16px", borderRadius: 8, border: "none",
